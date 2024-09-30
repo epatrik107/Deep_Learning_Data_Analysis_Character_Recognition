@@ -97,7 +97,6 @@ with open(output_file, 'w') as f:
     # Fejléc sor írása
     f.write("class;TestImage\n")
 
-    # Predikciók és fájlnevek kiírása
     for i, image_filename in enumerate(test_image_filenames):
         predicted_class = y_pred_classes[i]
         f.write(f"{predicted_class};{image_filename}\n")
