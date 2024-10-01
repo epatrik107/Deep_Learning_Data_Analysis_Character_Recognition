@@ -26,14 +26,28 @@ def load_images_from_folder(folder):
                 labels.append(subdir)  # Folder name is the label
     return np.array(images), np.array(labels)
 
+def load_images_from_folder_without_subdirs(folder):
+    images = []
+    filenames = []
+    for filename in os.listdir(folder):
+        img_path = os.path.join(folder, filename)
+        if os.path.isfile(img_path):
+            img = Image.open(img_path).convert('L')  # Convert to grayscale
+            img = img.resize((28, 28))  # Resize to 28x28 pixels
+            img_array = np.array(img)
+            images.append(img_array)
+            filenames.append(filename)  # Store the filename
+    return np.array(images), filenames
 
 # Load training and test data
 train_folder1 = './train1'
 train_folder2 = './train2'
 test_folder = './test'
-
+X_test, test_filenames = load_images_from_folder_without_subdirs(test_folder)
 X_data1, y_data1 = load_images_from_folder(train_folder1)
 X_data2, y_data2 = load_images_from_folder(train_folder2)
+print(X_test.shape)
+
 
 # Normalize and reshape images
 X_data1 = X_data1.astype('float32') / 255.
@@ -56,7 +70,6 @@ datagen = ImageDataGenerator(
     shear_range=0.1,
     fill_mode='nearest'
 )
-
 
 # Model definition with Batch Normalization
 def build_model():
@@ -87,7 +100,7 @@ def build_model():
 
 
 # Cross-validation setup
-kf = KFold(n_splits=5, shuffle=True, random_state=42)
+kf = KFold(n_splits=5, shuffle=True, random_state=42) #n_splits=5
 fold_no = 1
 fold_accuracies = []
 
@@ -113,7 +126,7 @@ for train_index, val_index in kf.split(X_data):
     history = model.fit(train_generator,
                         epochs=50,
                         validation_data=(X_val, y_val),
-                        callbacks=[early_stopping, reduce_lr])
+                        callbacks=[early_stopping, reduce_lr]) #epochs=50,
 
     # Evaluate the model on validation data
     val_loss, val_acc = model.evaluate(X_val, y_val)
@@ -126,18 +139,29 @@ for train_index, val_index in kf.split(X_data):
 average_accuracy = np.mean(fold_accuracies)
 print(f"Average cross-validation accuracy: {average_accuracy}")
 
+# Final model training
+final_model = build_model()
+final_model.fit(X_data, y_data, epochs=50, validation_split=0.2)  # Optionally add early stopping epochs=50
+
 # Model prediction on the test set
-X_test, _ = load_images_from_folder(test_folder)
-X_test = X_test.astype('float32') / 255.
-X_test = X_test.reshape(-1, 28, 28, 1)
+print(f"Loaded test data shape: {X_test.shape}")  # Check the shape of the loaded test data
 
-# Predict labels for the test set
-y_test_pred = model.predict(X_test)
+if X_test.size == 0:
+    print("No test images loaded. Please check the test folder.")
+else:
+    X_test = X_test.astype('float32') / 255.
+    X_test = X_test.reshape(-1, 28, 28, 1)
 
-# Convert predictions back to original label format
-y_test_labels = label_binarizer.inverse_transform(y_test_pred)
+    if X_test.ndim == 3:  # If there's only one image
+        X_test = np.expand_dims(X_test, axis=0)  # Add batch dimension
 
-# Save predictions to a file
-with open('predictions.txt', 'w') as f:
-    for label in y_test_labels:
-        f.write(f"{label}\n")
+    # Predict labels for the test set
+    y_test_pred = final_model.predict(X_test)
+
+    # Convert predictions back to original label format
+    y_test_labels = label_binarizer.inverse_transform(y_test_pred)
+
+    # Save predictions to a file
+    with open('predictions.txt', 'w') as f:
+        for filename, label in zip(test_filenames, y_test_labels):
+            f.write(f"{label};{filename}\n")
